@@ -1,0 +1,84 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+  <head>
+    <meta content='text/html; charset=utf-8' http-equiv='Content-type' />
+    <title>Pixie - Example Page</title>
+
+    <link href="../stylesheets/pixie.css" media="screen" rel="stylesheet" type="text/css" />
+
+    <script src="../javascripts/jquery.js" type="text/javascript"></script>
+    <script src="../javascripts/jqcolor.js" type="text/javascript"></script>
+    <script src="../javascripts/pixie.js" type="text/javascript"></script>
+    <script type="text/javascript">
+      (function($) {
+        $(function() {
+          function rand(n) {
+            return Math.floor(Math.random()*n);
+          }
+        
+          $('#pixie').pixie({
+            width: 32,
+            height: 32,
+            initializer: function(canvas) {
+              canvas.addAction({
+                name: "Alert",
+                perform: function() {
+                  alert("Hi");
+                }
+              });
+              
+              canvas.addAction({
+                name: "Random Fill",
+                perform: function(canvas) {
+                  canvas.eachPixel(function() {
+                    this.color('#' + [
+                      canvas.toHex(rand(255)),
+                      canvas.toHex(rand(255)),
+                      canvas.toHex(rand(255))
+                    ].join(''));
+                  });
+                }
+              });
+              
+              canvas.addTool({
+                name: "Party Brush",
+                hotkeys: ['1'],
+
+                mousedown: function(e) {
+                  this.color(this.canvas.color(rand(2) === 0));
+
+                  $.each(this.canvas.getNeighbors(this.x, this.y), function(i, neighbor) {
+                    if(neighbor) {
+                      neighbor.color(neighbor.canvas.color(rand(2) === 0));
+                    }
+                  });
+                },
+                mouseenter: function(e, color) {
+                  this.color(this.canvas.color(rand(2) === 0));
+
+                  $.each(this.canvas.getNeighbors(this.x, this.y), function(i, neighbor) {
+                    if(neighbor) {
+                      neighbor.color(neighbor.canvas.color(rand(2) === 0));
+                    }
+                  });
+                }
+              });
+            }
+          });
+        });
+      })(jQuery);
+    </script>
+  </head>
+
+  <body>
+    <div id='page'>
+      <div id='content'>
+      
+        <div id='pixie'>
+        </div>
+        
+      </div>
+    </div>
+  </body>
+  
+</html>

@@ -1,0 +1,23 @@
+== Overview
+
+  Pixie - The free extensible online pixel editor.
+
+  Pixie is a jQuery plugin.
+
+  Pixie provides an extensible plugin architecture for custom tools and actions.
+
+== Requirements
+
+  Require jqcolor plugin.
+
+== Usage
+
+  `$('#someDiv').pixie(options)`
+
+== Options
+
+  width: the width of the canvas
+  height: the height of the canvas
+  initializer: function accepting canvas as first argument to add custom tools or actions.
+
+
