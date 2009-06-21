@@ -884,6 +884,22 @@
       }
     },
 
+    undo: {
+      name: "Undo",
+      undoable: false,
+      perform: function(canvas) {
+        canvas.undo();
+      }
+    },
+
+    redo: {
+      name: "Redo",
+      undoable: false,
+      perform: function(canvas) {
+        canvas.redo();
+      }
+    },
+
     save: {
       name: "Download Image",
       perform: function(canvas) {
@@ -1033,6 +1049,56 @@
   };
 
   var rgbParser = /^rgb\((\d{1,3}),\s*(\d{1,3}),\s*(\d{1,3})\)$/;
+
+  var UndoStack = function() {
+    var undos = [];
+    var redos = [];
+    var empty = true;
+
+    return {
+      popUndo: function() {
+        var undo = undos.pop();
+
+        if(undo) {
+          redos.push(undo);
+        }
+
+        return undo;
+      },
+
+      popRedo: function() {
+        var undo = redos.pop();
+
+        if(undo) {
+          undos.push(undo);
+        }
+
+        return undo;
+      },
+
+      next: function() {
+        var last = undos[undos.length - 1];
+        if(!last || !empty) {
+          undos.push({});
+          empty = true;
+          // New future, no more redos
+          redos = [];
+        }
+      },
+
+      add: function(object, data) {
+        var last = undos[undos.length - 1];
+
+        // Only store this objects data if it is not already present.
+        if(!last[object]) {
+          last[object] = data;
+          empty = false;
+        }
+
+        return this;
+      }
+    };
+  };
   
   $.fn.pixie = function(options) {
     
@@ -1047,21 +1113,8 @@
       var canvas = $(div).addClass('canvas');
       var toolbar = $(div).addClass('toolbar');
       var colorbar = $(div).addClass('toolbar');
-      
-      function addAction(action) {
-        actionsMenu.append(
-          $("<a href='#' title='"+ action.name +"'>"+ action.name +"</a>")
-            .addClass('tool')
-            .bind("mousedown", function(e) {
-              action.perform(canvas);
-            })
-            .click(falseFn)
-        );
-      }
 
-      $.each(actions, function(key, action) {
-        addAction(action);
-      });
+      var undoStack = UndoStack();
 
       var currentTool = undefined;
       var active = false;
@@ -1074,55 +1127,6 @@
       ).append(
         secondaryColorPicker
       );
-
-      function addSwatch(color) {
-        colorbar.append(
-          $(div)
-            .addClass('swatch')
-            .css({backgroundColor: color})
-        );
-      }
-
-      $.each(["#000", "#FFF", "#666", "#CCC", "#800", "#080", "#008", "#880", "#808", "#088"], function(i, color) {
-        addSwatch(color);
-      });
-
-      function setTool(tool) {
-        currentTool = tool;
-        if(tool.cursor) {
-          pixie.css({cursor: tool.cursor});
-        } else {
-          pixie.css({cursor: "pointer"});
-        }
-      }
-
-      function addTool(tool) {
-        var alt = tool.name;
-
-        if(tool.hotkeys) {
-          alt += " ("+ tool.hotkeys +")";
-
-          $(window).keydown(function(e) {
-            if(tool.hotkeys[0].charCodeAt(0) == e.keyCode) {
-              setTool(tool);
-            }
-          });
-        }
-
-        toolbar.append(
-          $("<img src='"+ tool.icon +"' alt='"+ alt +"' title='"+ alt +"'></img>")
-            .addClass('tool')
-            .bind('mousedown', function(e) {
-              setTool(tool);
-            })
-        );
-      }
-
-      setTool(tools.pencil);
-
-      $.each(tools, function(key, tool) {
-        addTool(tool);
-      });
 
       pixie
         .bind('contextmenu', falseFn)
@@ -1148,8 +1152,12 @@
             x: col,
             y: row,
             canvas: canvas,
+            toString: function() {
+              return "[Pixel: " + this.x + ", " + this.y + "]";
+            },
             color: function(color) {
               if(arguments.length >= 1) {
+                undoStack.add(this, {pixel: this, color: this.css("backgroundColor")});
                 this.css("backgroundColor", color);
                 return this;
               } else {
@@ -1166,6 +1174,7 @@
           (function(pixel) {
             pixel
               .bind("mousedown", function(e){
+                undoStack.next();
                 active = true;
                 if(e.button === 0) {
                   mode = "P";
@@ -1270,12 +1279,59 @@
 
           return this;
         },
+
+        addSwatch: function(color) {
+          colorbar.append(
+            $(div)
+              .addClass('swatch')
+              .css({backgroundColor: color})
+          );
+        },
         
-        addAction: addAction,
+        addAction: function(action) {
+          actionsMenu.append(
+            $("<a href='#' title='"+ action.name +"'>"+ action.name +"</a>")
+              .addClass('tool')
+              .bind("mousedown", function(e) {
+                if(action.undoable !== false) {
+                  undoStack.next();
+                }
+                action.perform(canvas);
+              })
+              .click(falseFn)
+          );
+        },
 
-        addTool: addTool,
+        addTool: function(tool) {
+          var alt = tool.name;
 
-        setTool: setTool,
+          if(tool.hotkeys) {
+            alt += " ("+ tool.hotkeys +")";
+
+            $(window).keydown(function(e) {
+              if(tool.hotkeys[0].charCodeAt(0) == e.keyCode) {
+                canvas.setTool(tool);
+              }
+            });
+          }
+
+          toolbar.append(
+            $("<img src='"+ tool.icon +"' alt='"+ alt +"' title='"+ alt +"'></img>")
+              .addClass('tool')
+              .bind('mousedown', function(e) {
+                canvas.setTool(tool);
+              })
+          );
+        },
+
+        setTool: function(tool) {
+          currentTool = tool;
+          if(tool.cursor) {
+            pixie.css({cursor: tool.cursor});
+          } else {
+            pixie.css({cursor: "pointer"});
+          }
+        },
 
         toPNG: function() {
           var p = new Pnglet(width, height, 256);
@@ -1299,7 +1355,47 @@
 
         toDataURL: function() {
           return 'url(data:image/png;base64,' + this.toBase64() + ')';
+        },
+
+        undo: function() {
+          var data = undoStack.popUndo();
+          var swap;
+
+          if(data) {
+            $.each(data, function() {
+              swap = this.color;
+              this.color = this.pixel.css('backgroundColor');
+              this.pixel.css('backgroundColor', (swap));
+            });
+          }
+        },
+
+        redo: function() {
+          var data = undoStack.popRedo();
+          var swap;
+
+          if(data) {
+            $.each(data, function() {
+              swap = this.color;
+              this.color = this.pixel.css('backgroundColor');
+              this.pixel.css('backgroundColor', (swap));
+            });
+          }
         }
+      });
+
+      $.each(actions, function(key, action) {
+        canvas.addAction(action);
+      });
+
+      $.each(["#000", "#FFF", "#666", "#CCC", "#800", "#080", "#008", "#880", "#808", "#088"], function(i, color) {
+        canvas.addSwatch(color);
+      });
+
+      canvas.setTool(tools.pencil);
+
+      $.each(tools, function(key, tool) {
+        canvas.addTool(tool);
       });
 
       if(initializer) {
