@@ -2,9 +2,15 @@
   float: left;
   border-top: 1px solid black;
   border-left: 1px solid black;
-  background: transparent url(../images/pixie/pixel_bg.png);
+  background: transparent url(/images/pixie/pixel_bg.png);
   -moz-user-select: none;
-  margin-right: 1em; }
+  margin-right: 1em;
+  margin-bottom: 1em;
+  position: relative; }
+.pixie .layer {
+  position: absolute;
+  top: 0px;
+  left: 0px; }
 .pixie .pixel {
   float: left;
   width: 15px;
@@ -32,7 +38,7 @@
   margin-left: 2px; }
   .pixie .tool:hover {
     background-color: #cccccc; }
-  .pixie .tool.set_tool {
+  .pixie .tool.active {
     background-color: #1084ce; }
   .pixie .tool img {
     border: none; }
@@ -49,4 +55,6 @@
   border-color: #cccccc;
   margin: 7px 2px 0 0;
   width: 50px; }
-
+.pixie .preview {
+  float: left;
+  margin: 0 1em; }

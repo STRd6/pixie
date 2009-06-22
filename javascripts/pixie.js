@@ -875,15 +875,6 @@
   var imageDir = "../images/pixie/";
 
   var actions = {
-    clear: {
-      name: "Clear Canvas",
-      perform: function(canvas) {
-        canvas.eachPixel(function(pixel) {
-          pixel.color(null);
-        });
-      }
-    },
-
     undo: {
       name: "Undo",
       undoable: false,
@@ -897,6 +888,22 @@
       undoable: false,
       perform: function(canvas) {
         canvas.redo();
+      }
+    },
+
+    clear: {
+      name: "Clear Layer",
+      perform: function(canvas) {
+        canvas.eachPixel(function(pixel) {
+          pixel.color(null);
+        });
+      }
+    },
+
+    preview: {
+      name: "Preview",
+      perform: function(canvas) {
+        canvas.showPreview();
       }
     },
 
@@ -1044,6 +1051,7 @@
 
   var falseFn = function() {return false};
   var div = '<div></div>';
+  var clear = '<div class="clear"></div>';
   var ColorPicker = function() {
     return $('<input></input>').addClass('color').colorPicker();
   };
@@ -1105,14 +1113,19 @@
     options = options || {};
     var width = options.width || 16;
     var height = options.height || 16;
+    var pixelWidth = 16;
+    var pixelHeight = 16;
     var initializer = options.initializer;
+    var layers = options.layers || 2;
 
     return this.each(function() {
       var pixie = $(div).addClass('pixie');
       var actionsMenu = $(div).addClass('actions');
-      var canvas = $(div).addClass('canvas');
+      var canvas = $(div).addClass('canvas').css({width: pixelWidth*width, height: pixelHeight*height});
       var toolbar = $(div).addClass('toolbar');
       var colorbar = $(div).addClass('toolbar');
+      var preview = $(div).addClass('preview').css({width: width, height: height});
+      var layerMenu = $(div).addClass('actions');
 
       var undoStack = UndoStack();
 
@@ -1144,63 +1157,101 @@
 
       var pixels = [];
 
-      for(var row = 0; row < height; row++) {
-        pixels[row] = [];
-        for(var col = 0; col < width; col++) {
-          var pixel = $(div).addClass('pixel');
-          $.extend(pixel, {
-            x: col,
-            y: row,
-            canvas: canvas,
-            toString: function() {
-              return "[Pixel: " + this.x + ", " + this.y + "]";
-            },
-            color: function(color) {
-              if(arguments.length >= 1) {
-                undoStack.add(this, {pixel: this, color: this.css("backgroundColor")});
-                this.css("backgroundColor", color);
-                return this;
-              } else {
-                return this.css("backgroundColor");
-              }
-            }
-          });
-          pixels[row][col] = pixel;
-        }
-      }
+      for(var layer = 0; layer < layers; layer++) {
+        var layerDiv = $(div).addClass("layer").css("zIndex", layer);
+        pixels[layer] = [];
 
-      for(row = 0; row < height; row++) {
-        for(col = 0; col < width; col++) {
-          (function(pixel) {
-            pixel
-              .bind("mousedown", function(e){
-                undoStack.next();
-                active = true;
-                if(e.button === 0) {
-                  mode = "P";
+        (function(currentLayer) {
+          var layerSelection = $("<a href='#' title='Layer "+ currentLayer +"'>"+ currentLayer +"</a>")
+            .addClass('tool')
+            .bind("mousedown", function(e) {
+              layer = currentLayer;
+              layerMenu.children().removeClass("active");
+              $(this).addClass("active");
+            })
+            .click(falseFn)
+
+          if(currentLayer === 0) {
+            layerSelection.addClass("active");
+          }
+
+          layerMenu.append(layerSelection);
+        })(layer);
+
+        for(var row = 0; row < height; row++) {
+          pixels[layer][row] = [];
+
+          for(var col = 0; col < width; col++) {
+            var pixel = $(div).addClass('pixel');
+            pixels[layer][row][col] = pixel;
+
+            $.extend(pixel, {
+              x: col,
+              y: row,
+              z: layer,
+              canvas: canvas,
+              toString: function() {
+                return "[Pixel: " + this.x + ", " + this.y + ", " + this.z + "]";
+              },
+              color: function(color) {
+                if(arguments.length >= 1) {
+                  undoStack.add(this, {pixel: this, color: this.css("backgroundColor")});
+                  this.css("backgroundColor", color);
+                  return this;
                 } else {
-                  mode = "S";
+                  return this.css("backgroundColor");
                 }
+              }
+            });
 
-                e.preventDefault();
-              })
-              .bind("mousedown mouseup mouseenter", function(e) {
-                if(active && currentTool && currentTool[e.type]) {
-                  currentTool[e.type].call(pixel, e, canvas.color(), pixel);
-                }
-              });
 
-            canvas.append(pixel);
-          })(pixels[row][col]);
+            // Only the top layer should be sensitive to events
+            if(layer == layers - 1) {
+              (function(pixel, row, col){
+                pixel
+                  .bind("mousedown", function(e){
+                    undoStack.next();
+                    active = true;
+                    if(e.button === 0) {
+                      mode = "P";
+                    } else {
+                      mode = "S";
+                    }
+
+                    e.preventDefault();
+                  })
+                  .bind("mousedown mouseup mouseenter", function(e) {
+                    var p = pixels[layer][row][col];
+                    if(active && currentTool && currentTool[e.type]) {
+                      currentTool[e.type].call(p, e, canvas.color(), p);
+                    }
+                  });
+              })(pixel, row, col);
+            }
+
+            layerDiv.append(pixel);
+
+          }
+
+          layerDiv.append(clear);
         }
-        canvas.append('<div class="clear"></div>');
+
+        canvas.append(layerDiv);
       }
+
+      canvas.append(clear);
+
+      layer = 0;
 
       $.extend(canvas, {
-        eachPixel: function(fn) {
+        eachPixel: function(fn, z) {
+          if(z === undefined) {
+            z = layer;
+          }
+
           for(row = 0; row < height; row++) {
             for(col = 0; col < width; col++) {
-              var pixel = pixels[row][col];
+              var pixel = pixels[z][row][col];
               fn.call(pixel, pixel, col, row);
             }
           }
@@ -1208,22 +1259,30 @@
           return canvas;
         },
 
-        getPixel: function(x, y) {
+        getPixel: function(x, y, z) {
+          if(z === undefined) {
+            z = layer;
+          }
+
           if(y >= 0 && y < height) {
             if(x >= 0 && x < width) {
-              return pixels[y][x];
+              return pixels[z][y][x];
             }
           }
 
           return undefined;
         },
         
-        getNeighbors: function(x, y) {
+        getNeighbors: function(x, y, z) {
+          if(z === undefined) {
+            z = layer;
+          }
+
           return [
-            this.getPixel(x+1, y),
-            this.getPixel(x, y+1),
-            this.getPixel(x-1, y),
-            this.getPixel(x, y-1)
+            this.getPixel(x+1, y, z),
+            this.getPixel(x, y+1, z),
+            this.getPixel(x-1, y, z),
+            this.getPixel(x, y-1, z)
           ];
         },
         
@@ -1311,17 +1370,21 @@
             $(window).keydown(function(e) {
               if(tool.hotkeys[0].charCodeAt(0) == e.keyCode) {
                 canvas.setTool(tool);
+                toolbar.children().removeClass("active");
+                toolDiv.addClass("active");
               }
             });
           }
 
-          toolbar.append(
-            $("<img src='"+ tool.icon +"' alt='"+ alt +"' title='"+ alt +"'></img>")
-              .addClass('tool')
-              .bind('mousedown', function(e) {
-                canvas.setTool(tool);
-              })
-          );
+          var toolDiv = $("<img src='"+ tool.icon +"' alt='"+ alt +"' title='"+ alt +"'></img>")
+            .addClass('tool')
+            .bind('mousedown', function(e) {
+              canvas.setTool(tool);
+              toolbar.children().removeClass("active");
+              toolDiv.addClass("active");
+            });
+
+          toolbar.append(toolDiv);
         },
 
         setTool: function(tool) {
@@ -1336,15 +1399,19 @@
         toPNG: function() {
           var p = new Pnglet(width, height, 256);
 
-          this.eachPixel(function(pixel, x, y) {
-            if(pixel.css('backgroundColor') == "transparent") {
-              p.point(p.color(0, 0, 0, 0), x, y);
-            } else {
-              var rgb = rgbParser.exec(pixel.css('backgroundColor'));
-              var alpha = 255;
-              p.point(p.color(rgb[1], rgb[2], rgb[3], alpha), x, y);
-            }
-          });
+          for(var z = 0; z < layers; z++) {
+            this.eachPixel(function(pixel, x, y) {
+              if(pixel.css('backgroundColor') == "transparent") {
+                if(z === 0) {
+                  p.point(p.color(0, 0, 0, 0), x, y);
+                }
+              } else {
+                var rgb = rgbParser.exec(pixel.css('backgroundColor'));
+                var alpha = 255;
+                p.point(p.color(rgb[1], rgb[2], rgb[3], alpha), x, y);
+              }
+            }, z);
+          }
 
           return p.output();
         },
@@ -1355,6 +1422,10 @@
 
         toDataURL: function() {
           return 'url(data:image/png;base64,' + this.toBase64() + ')';
+        },
+
+        showPreview: function() {
+          preview.css('backgroundImage', this.toDataURL());
         },
 
         undo: function() {
@@ -1392,11 +1463,12 @@
         canvas.addSwatch(color);
       });
 
-      canvas.setTool(tools.pencil);
-
       $.each(tools, function(key, tool) {
         canvas.addTool(tool);
       });
+
+      canvas.setTool(tools.pencil);
+      toolbar.children().eq(0).addClass("active");
 
       if(initializer) {
         initializer(canvas);
@@ -1407,7 +1479,9 @@
         .append(toolbar)
         .append(canvas)
         .append(colorbar)
-        .append("<div class='clear'><div>");
+        .append(preview)
+        .append(clear)
+        .append(layerMenu);
 
       $(this).append(pixie);
     });
