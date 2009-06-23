@@ -878,6 +878,7 @@
     undo: {
       name: "Undo",
       undoable: false,
+      hotkeys: ["ctrl+z"],
       perform: function(canvas) {
         canvas.undo();
       }
@@ -886,6 +887,7 @@
     redo: {
       name: "Redo",
       undoable: false,
+      hotkeys: ["ctrl+y"],
       perform: function(canvas) {
         canvas.redo();
       }
@@ -909,8 +911,87 @@
 
     save: {
       name: "Download Image",
+      hotkeys: ["ctrl+s"],
       perform: function(canvas) {
         document.location.href = 'data:image/octet-stream;base64,' + canvas.toBase64();
+      }
+    },
+
+    left: {
+      name: "Move Left",
+      menu: false,
+      hotkeys: ['left'],
+      perform: function(canvas) {
+        canvas.eachPixel(function(pixel, x, y) {
+          var rightPixel = canvas.getPixel(x + 1, y);
+
+          if(rightPixel) {
+            pixel.color(rightPixel.color());
+          } else {
+            pixel.color(null);
+          }
+        });
+      }
+    },
+
+    right: {
+      name: "Move Right",
+      menu: false,
+      hotkeys: ['right'],
+      perform: function(canvas) {
+        var width = canvas.width;
+        var height = canvas.height;
+        for(var x = width-1; x >= 0; x--) {
+          for(var y = 0; y < height; y++) {
+            var currentPixel = canvas.getPixel(x, y);
+            var leftPixel = canvas.getPixel(x-1, y);
+
+            if(leftPixel) {
+              currentPixel.color(leftPixel.color());
+            } else {
+              currentPixel.color(null);
+            }
+          }
+        }
+      }
+    },
+
+    up: {
+      name: "Move Up",
+      menu: false,
+      hotkeys: ['up'],
+      perform: function(canvas) {
+        canvas.eachPixel(function(pixel, x, y) {
+          var lowerPixel = canvas.getPixel(x, y + 1);
+
+          if(lowerPixel) {
+            pixel.color(lowerPixel.color());
+          } else {
+            pixel.color(null);
+          }
+        });
+      }
+    },
+
+    down: {
+      name: "Move Down",
+      menu: false,
+      hotkeys: ['down'],
+      perform: function(canvas) {
+        var width = canvas.width;
+        var height = canvas.height;
+        for(var x = 0; x < width; x++) {
+          for(var y = height-1; y >= 0; y--) {
+            var currentPixel = canvas.getPixel(x, y);
+            var upperPixel = canvas.getPixel(x, y-1);
+
+            if(upperPixel) {
+              currentPixel.color(upperPixel.color());
+            } else {
+              currentPixel.color(null);
+            }
+          }
+        }
       }
     }
   };
@@ -1348,40 +1429,63 @@
         },
         
         addAction: function(action) {
-          actionsMenu.append(
-            $("<a href='#' title='"+ action.name +"'>"+ action.name +"</a>")
-              .addClass('tool')
-              .bind("mousedown", function(e) {
-                if(action.undoable !== false) {
-                  undoStack.next();
-                }
-                action.perform(canvas);
-              })
-              .click(falseFn)
-          );
+          var titleText = action.name;
+          var undoable = action.undoable;
+
+          function doIt() {
+            if(undoable !== false) {
+              undoStack.next();
+            }
+            action.perform(canvas);
+          }
+
+          if(action.hotkeys) {
+            titleText += " ("+ action.hotkeys +")";
+
+            $.each(action.hotkeys, function(i, hotkey) {
+              $(document).bind('keydown', hotkey, function(e) {
+                doIt();
+                e.preventDefault();
+              });
+            });
+          }
+
+          if(action.menu !== false) {
+            actionsMenu.append(
+              $("<a href='#' title='"+ titleText +"'>"+ action.name +"</a>")
+                .addClass('tool')
+                .bind("mousedown", function(e) {
+                  doIt();
+                })
+                .click(falseFn)
+            );
+          }
         },
 
         addTool: function(tool) {
           var alt = tool.name;
 
+          function setMe() {
+            canvas.setTool(tool);
+            toolbar.children().removeClass("active");
+            toolDiv.addClass("active");
+          }
+
           if(tool.hotkeys) {
             alt += " ("+ tool.hotkeys +")";
 
-            $(window).keydown(function(e) {
-              if(tool.hotkeys[0].charCodeAt(0) == e.keyCode) {
-                canvas.setTool(tool);
-                toolbar.children().removeClass("active");
-                toolDiv.addClass("active");
-              }
+            $.each(tool.hotkeys, function(i, hotkey) {
+              $(document).bind('keydown', hotkey, function(e) {
+                setMe();
+                e.preventDefault();
+              });
             });
           }
 
           var toolDiv = $("<img src='"+ tool.icon +"' alt='"+ alt +"' title='"+ alt +"'></img>")
             .addClass('tool')
             .bind('mousedown', function(e) {
-              canvas.setTool(tool);
-              toolbar.children().removeClass("active");
-              toolDiv.addClass("active");
+              setMe();
             });
 
           toolbar.append(toolDiv);
@@ -1452,7 +1556,10 @@
               this.pixel.css('backgroundColor', (swap));
             });
           }
-        }
+        },
+
+        width: width,
+        height: height
       });
 
       $.each(actions, function(key, action) {
